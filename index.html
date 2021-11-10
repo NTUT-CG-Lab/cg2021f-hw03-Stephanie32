@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>three.js webgl - loaders - MMD loader</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+	<style>
+		body {
+			background-color: #fff;
+			color: #444;
+		}
+
+		a {
+			color: #08f;
+		}
+	</style>
+</head>
+
+<body>
+	<div id="info"></div>
+
+	<script src="js/libs/ammo.wasm.js"></script>
+	<script src="scoreoutputer.min.js"></script>
+	<script>
+		// 建構子 ScoreOutputer 接受一個字串，該字串為 csv 的檔案名稱
+		// 以下面範例，檔名就為 "109598105(總分: 6).csv"
+		var so = new ScoreOutputer("110598099");
+		so.installCSS(function () {
+			// 安裝 bootstrap 的 css，如果在 html 上方引用 bootstrap 5.1.1 的話就不用使用 installCSS ，注意一定要 bootstrap css 5.1.1 版
+			// installCSS 接收一個 callback 當作參數，作為成功安裝 bootstrap css 的回呼函式
+
+			//加入項目，分數，完成狀況
+			//第一個參數為 項目名稱
+			//第2個參數為 項目分數
+			//第3個參數為 完成狀況，有完成 true/未完成 false
+			//有幾個項目就呼叫幾個 addChild
+			//addChild 要比 renderModal 先呼叫
+			so.addChild("繪製出 5 個畫面", 1, true);
+			so.addChild("回答問題", 1, true);
+			so.addChild("可按鍵選擇上 / 下一隻角色", 1, true);
+			so.addChild("讀取作業 2 儲存的座標點在眼睛上繪製出分割線", 1, true);
+			so.addChild("可選擇當下控制哪個虹膜", 1, true);
+			so.addChild("按滑鼠左鍵控制虹膜移動，右鍵停止", 2, true);
+			so.addChild("複製參數至對應目標參數", 2, true);
+			so.addChild("可儲存虹膜轉動角度", 1, true);
+
+			//產生自評表，參數如下所示
+			so.renderModal(
+				//1. 自評表插入位置 (預設 document.body)
+				document.body,
+				//2. 自評表背景 (預設紅色)
+				'rgba(100,45,58,1)',
+				//3. 自評表文字顏色 (預設白色)
+				'white',
+				//4. 自評表文字大小 (預設 14pt)
+				'15pt',
+				//5. 自評表 checkbox 文字大小 (預設多少忘了)
+				'15px',
+				//6. 自評表標題 (預設 "自我評分表")
+				dialogTitle = "自我評分表"
+			);
+
+			//設定下載按鈕 <-- 一定要呼叫這個函數，不然沒有下載功能
+			so.installDownloadBtn();
+
+			//產生 "開啟自評表按鈕"
+			so.renderBtn(
+				//自評表按鈕插入位置
+				document.querySelector("#info"),
+				//自評表按鈕文字
+				"開啟自評表"
+			);
+		});
+	</script>
+	<script type="module">
+
+		import * as THREE from './build/three.module.js';
+		import { GUI } from './jsm/libs/dat.gui.module.js';
+		import { OrbitControls } from './jsm/controls/OrbitControls.js';
+		import { OutlineEffect } from './jsm/effects/OutlineEffect.js';
+		import { MMDLoader } from './jsm/loaders/MMDLoader.js';
+		import { MMDAnimationHelper } from './jsm/animation/MMDAnimationHelper.js';
+		import * as SkeletonUtils from './jsm/utils/SkeletonUtils.js';
+
+		let scene, renderer, effect;
+		let scene2, scene3, scene4, scene5;
+		let mesh, helper;
+		let modelIsLoaded = false;
+		let SCREEN_WIDTH = window.innerWidth;
+		let SCREEN_HEIGHT = window.innerHeight;
+		let aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
+		let frustumSize = 30;
+		let camera, camera2, camera3, camera4, camera5;
+		const modelFile_list = ["models/mmd/kizunaai/kizunaai.pmx", 
+			"models/mmd/るいのれ式物述有栖_配布用フォルダ/物述有栖.pmx", "models/mmd/『天宮こころ(Kokoro Amamiya)』/『天宮こころ(Kokoro Amamiya)』.pmx"];
+		let Index = 0;
+		let modelIsChange = false;
+		let location_data;
+		let line_row_1, line_row_2, line_row_3, line_row_4, line_row_5;
+		let line_column_1, line_column_2, line_column_3, line_column_4, line_column_5, line_column_6, line_column_7, line_column_8, line_column_9;
+		let group_line_row, group_line_column;
+		let line_set_list = ['camera2_righteye', 'camera2_lefteye', 'camera3_righteye', 'camera3_lefteye', 'camera4_righteye', 'camera4_lefteye', 'camera5_righteye', 'camera5_lefteye'];
+		let line_set_Index = 0;
+		let click_positionX, click_positionY;
+		let clone3, clone4, clone5;
+		//let clone2;
+		let rotation_data = {
+								"modellist": [
+								{
+									"location": "models/mmd/kizunaai/kizunaai.pmx",
+									"line_locationx_1": 0,
+									"line_locationy_1": 8.0108460309261,
+									"line_locationx_2": 0.2560890852765797,
+									"line_locationy_2": 3,
+									"line_locationx_3": 0,
+									"line_locationy_3": 8.403876802526323,
+									"line_locationx_4": 0.7257061053431487,
+									"line_locationy_4": 3,
+									"Right_X_negative_angle": 0,
+									"Left_X_negative_angle": 0,
+									"Right_X_positive_angle": 0,
+									"Left_X_positive_angle": 0,
+									"Right_Y_negative_angle": 0,
+									"Left_Y_negative_angle": 0,
+									"Right_Y_positive_angle": 0,
+									"Left_Y_positive_angle": 0
+								},
+								{
+									"location": "models/mmd/るいのれ式物述有栖_配布用フォルダ/物述有栖.pmx",
+									"line_locationx_1": 0,
+									"line_locationy_1": 4.323191034149362,
+									"line_locationx_2": 0.3119120604735788,
+									"line_locationy_2": 3,
+									"line_locationx_3": 0,
+									"line_locationy_3": 4.739582970065507,
+									"line_locationx_4": 0.7789335678835471,
+									"line_locationy_4": 3,
+									"Right_X_negative_angle": 0,
+									"Left_X_negative_angle": 0,
+									"Right_X_positive_angle": 0,
+									"Left_X_positive_angle": 0,
+									"Right_Y_negative_angle": 0,
+									"Left_Y_negative_angle": 0,
+									"Right_Y_positive_angle": 0,
+									"Left_Y_positive_angle": 0
+								},
+								{
+									"location": "models/mmd/『天宮こころ(Kokoro Amamiya)』/『天宮こころ(Kokoro Amamiya)』.pmx",
+									"line_locationx_1": 0,
+									"line_locationy_1": 5.339888177646343,
+									"line_locationx_2": 0.29450037202893214,
+									"line_locationy_2": 3,
+									"line_locationx_3": 0,
+									"line_locationy_3": 5.578402543574304,
+									"line_locationx_4": 0.7565758819247913,
+									"line_locationy_4": 3,
+									"Right_X_negative_angle": 0,
+									"Left_X_negative_angle": 0,
+									"Right_X_positive_angle": 0,
+									"Left_X_positive_angle": 0,
+									"Right_Y_negative_angle": 0,
+									"Left_Y_negative_angle": 0,
+									"Right_Y_positive_angle": 0,
+									"Left_Y_positive_angle": 0
+								}
+								]
+							}
+		//讀取location_data內容的打法:
+		//console.log(location_data['modellist'][0]['line_locationx_2']);
+
+		Ammo().then(function (AmmoLib) {
+
+			Ammo = AmmoLib;
+
+			init();
+			animate();
+
+		});
+
+		readJSON("./model_data.json");
+
+		function init() {
+			
+			const container = document.createElement('div');
+			document.body.appendChild(container);
+
+			camera = new THREE.OrthographicCamera(0.5 * frustumSize * aspect / - 2, 0.5 * frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, 0.1, 1000);
+			camera2 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera3 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera4 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera5 = new THREE.OrthographicCamera(0.25 * frustumSize * aspect / - 2, 0.25 * frustumSize * aspect / 2, 0.5 * frustumSize / 2, 0.5 * frustumSize / - 2, 0.1, 1000);
+			camera.position.z = 30;
+			camera2.position.z = 30;
+			camera3.position.z = 30;
+			camera4.position.z = 30;
+			camera5.position.z = 30;
+			
+			// Scenes
+			//scene = new THREE.Scene();
+			scene2 = new THREE.Scene();
+			scene3 = new THREE.Scene();
+			scene4 = new THREE.Scene();
+			scene5 = new THREE.Scene();
+
+			//Light
+			//const ambient = new THREE.AmbientLight(0x666666);
+			//scene.add(ambient);
+			const ambient2 = new THREE.AmbientLight(0x666666);
+			scene2.add(ambient2);
+			const ambient3 = new THREE.AmbientLight(0x666666);
+			scene3.add(ambient3);
+			const ambient4 = new THREE.AmbientLight(0x666666);
+			scene4.add(ambient4);
+			const ambient5 = new THREE.AmbientLight(0x666666);
+			scene5.add(ambient5);
+
+			//const directionalLight = new THREE.DirectionalLight(0x887766);
+			//directionalLight.position.set(- 1, 1, 1).normalize();
+			//scene.add(directionalLight);
+			const directionalLight2 = new THREE.DirectionalLight(0x887766);
+			directionalLight2.position.set(- 1, 1, 1).normalize();
+			scene2.add(directionalLight2);
+			const directionalLight3 = new THREE.DirectionalLight(0x887766);
+			directionalLight3.position.set(- 1, 1, 1).normalize();
+			scene3.add(directionalLight3);
+			const directionalLight4 = new THREE.DirectionalLight(0x887766);
+			directionalLight4.position.set(- 1, 1, 1).normalize();
+			scene4.add(directionalLight4);
+			const directionalLight5 = new THREE.DirectionalLight(0x887766);
+			directionalLight5.position.set(- 1, 1, 1).normalize();
+			scene5.add(directionalLight5);
+			
+			//Renderer
+			renderer = new THREE.WebGLRenderer({ antialias: true });
+			renderer.setPixelRatio(window.devicePixelRatio);
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			container.appendChild(renderer.domElement);
+			renderer.autoClear = false;
+			effect = new OutlineEffect(renderer);
+
+			//Groups
+			group_line_row = new THREE.Group();
+			group_line_column = new THREE.Group();
+			scene2.add(group_line_row);
+			scene2.add(group_line_column);
+
+			// Lines
+			//row line, red
+			const material_red = new THREE.LineBasicMaterial({
+				color: 0xff0000
+			});
+			const points1 = [];
+			points1.push( new THREE.Vector3( 0, 0, 2 ) );
+			points1.push( new THREE.Vector3( 10, 0, 2 ) );
+			const geometry = new THREE.BufferGeometry().setFromPoints( points1 );
+			line_row_1 = new THREE.Line( geometry, material_red );
+			line_row_2 = new THREE.Line( geometry, material_red );
+			line_row_3 = new THREE.Line( geometry, material_red );
+			line_row_4 = new THREE.Line( geometry, material_red );
+			line_row_5 = new THREE.Line( geometry, material_red );
+
+			//column line, green
+			const material_green = new THREE.LineBasicMaterial({
+				color: 0x00ff00
+			});
+			const points2 = [];
+			points2.push( new THREE.Vector3( 0, 0, 2 ) );
+			points2.push( new THREE.Vector3( 0, 10, 2 ) );
+			const geometry2 = new THREE.BufferGeometry().setFromPoints( points2 );
+			line_column_1 = new THREE.Line( geometry2, material_green );
+			line_column_2 = new THREE.Line( geometry2, material_green );
+			line_column_3 = new THREE.Line( geometry2, material_green );
+			line_column_4 = new THREE.Line( geometry2, material_green );
+			line_column_5 = new THREE.Line( geometry2, material_green );
+			line_column_6 = new THREE.Line( geometry2, material_green );
+			line_column_7 = new THREE.Line( geometry2, material_green );
+			line_column_8 = new THREE.Line( geometry2, material_green );
+			line_column_9 = new THREE.Line( geometry2, material_green );
+
+			//model
+			reloadModel();
+
+			//set Camera and Lines position
+			Setting();
+
+			//Event
+			window.addEventListener('resize', onWindowResize);
+			document.addEventListener('keydown', onKeyDown);
+			document.addEventListener('pointerdown', onPointerDown);
+			document.oncontextmenu = new Function("return false");
+			oncontextmenu="return false";
+
+		}
+
+		function readJSON(file_name){
+			console.log("reading json");
+			
+			var json_file = new XMLHttpRequest();
+			json_file.open("GET", file_name, false);
+			json_file.send(null);
+			if(json_file.readyState == 4 && json_file.status == 200){
+				var temp = json_file.response;
+				location_data =  JSON.parse(temp);
+			}
+		}
+
+		function reloadModel(){
+			// model
+			function onProgress(xhr) {
+
+				if (xhr.lengthComputable) {
+
+					const percentComplete = xhr.loaded / xhr.total * 100;
+					console.log(Math.round(percentComplete, 2) + '% downloaded');
+					if(xhr.loaded / xhr.total == 1){
+						modelIsLoaded = true;
+					}
+
+				}
+			}
+			
+			const modelFile = modelFile_list[Index];
+			helper = new MMDAnimationHelper();
+			const loader = new MMDLoader();
+
+			loader.load(modelFile, function (object) {
+
+				mesh = object;
+				mesh.position.y = - 10;
+				mesh.name = 'model';
+
+				//clone2 = SkeletonUtils.clone(mesh);
+				clone3 = SkeletonUtils.clone(mesh);
+				clone4 = SkeletonUtils.clone(mesh);
+				clone5 = SkeletonUtils.clone(mesh);
+
+				//clone2.name = 'model2';
+				clone3.name = 'model3';
+				clone4.name = 'model4';
+				clone5.name = 'model5';
+				
+				//scene2.add(clone2);
+				scene2.add(mesh);
+				scene3.add(clone3);
+				scene4.add(clone4);
+				scene5.add(clone5);
+
+			}, onProgress, null);
+		}
+
+		function Setting(){
+			//Cameras
+			var model_loc = location_data['modellist'][Index];
+			var camera_width = model_loc['line_locationx_4'] * 2 * 1.2;
+			var eyes_middle_y = model_loc['line_locationy_1'] + (model_loc['line_locationy_3'] - model_loc['line_locationy_1']) / 2;
+
+			camera.left = - model_loc['line_locationx_4'];
+			camera.right = - model_loc['line_locationx_2'];
+			camera.top = eyes_middle_y + (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+			camera.bottom = eyes_middle_y - (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+			camera.updateProjectionMatrix();
+
+			camera2.left = - model_loc['line_locationx_4'] * 1.2;
+			camera2.right = model_loc['line_locationx_4'] * 1.2;
+			camera2.top = eyes_middle_y + camera_width * (1/aspect);
+			camera2.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera2.updateProjectionMatrix();
+
+			camera3.left = - model_loc['line_locationx_4'] * 1.2;
+			camera3.right = model_loc['line_locationx_4'] * 1.2;
+			camera3.top = eyes_middle_y + camera_width * (1/aspect);
+			camera3.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera3.updateProjectionMatrix();
+
+			camera4.left = - model_loc['line_locationx_4'] * 1.2;
+			camera4.right = model_loc['line_locationx_4'] * 1.2;
+			camera4.top = eyes_middle_y + camera_width * (1/aspect);
+			camera4.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera4.updateProjectionMatrix();
+
+			camera5.left = - model_loc['line_locationx_4'] * 1.2;
+			camera5.right = model_loc['line_locationx_4'] * 1.2;
+			camera5.top = eyes_middle_y + camera_width * (1/aspect);
+			camera5.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera5.updateProjectionMatrix();
+
+			//Lines
+			line_set_Index = 0;
+			scene2.add(group_line_row);
+			scene2.add(group_line_column);
+			//row lines
+			var model_loc = location_data['modellist'][Index];
+			var row_line_bottom = model_loc['line_locationy_1'];
+			var row_line_top = model_loc['line_locationy_3'];
+			var row_division = (row_line_top - row_line_bottom) / 4;
+			//line1~5是下到上
+			line_row_1.position.y = row_line_bottom;
+			line_row_2.position.y = row_line_bottom + 1 * row_division;
+			line_row_3.position.y = row_line_bottom + 2 * row_division;
+			line_row_4.position.y = row_line_bottom + 3 * row_division;
+			line_row_5.position.y = row_line_top;
+			group_line_row.add(line_row_1);
+			group_line_row.add(line_row_2);
+			group_line_row.add(line_row_3);
+			group_line_row.add(line_row_4);
+			group_line_row.add(line_row_5);
+			group_line_row.position.x = -10;
+
+			//column lines
+			var column_line_inside = model_loc['line_locationx_2'];
+			var column_line_outside = model_loc['line_locationx_4'];
+			var column_line_y = model_loc['line_locationy_4'];
+			var column_division = (column_line_outside - column_line_inside) / 8;
+			//line1~9是眼睛內側到眼睛外側
+			line_column_1.position.x = 0;
+			line_column_2.position.x = -1 * column_division;
+			line_column_3.position.x = -2 * column_division;
+			line_column_4.position.x = -3 * column_division;
+			line_column_5.position.x = -4 * column_division;
+			line_column_6.position.x = -5 * column_division;
+			line_column_7.position.x = -6 * column_division;
+			line_column_8.position.x = -7 * column_division;
+			line_column_9.position.x = -8 * column_division;
+			group_line_column.add(line_column_1);
+			group_line_column.add(line_column_2);
+			group_line_column.add(line_column_3);
+			group_line_column.add(line_column_4);
+			group_line_column.add(line_column_5);
+			group_line_column.add(line_column_6);
+			group_line_column.add(line_column_7);
+			group_line_column.add(line_column_8);
+			group_line_column.add(line_column_9);
+			group_line_column.position.x = - column_line_inside;
+			group_line_column.position.y = column_line_y;
+		}
+
+		function onKeyDown(event_keyboard){
+			//console.log(event_keyboard.keyCode);
+			switch(event_keyboard.keyCode){
+				case 49: //按1
+					if(line_set_Index == 0)
+						break;
+					else
+						line_set_Index = line_set_Index - 1; 
+					setLines();
+					break;
+				case 50: //按2
+					if(line_set_Index == 7)
+						break;
+					else
+						line_set_Index = line_set_Index + 1;
+					setLines();
+					break;
+				case 65: //按a
+					if(Index == 0)
+						Index = 3;
+					Index = Index-1;
+					modelIsChange = true;
+					break;
+				case 68: //按d
+					Index = (Index+1)%3;
+					modelIsChange = true;
+					break;
+				case 81: //按q
+					copy_rotation();
+					break;
+				case 83: //按s
+					save_data();
+					break;
+			}
+		}
+
+		function setLines(){
+
+			if(line_set_Index % 2 == 0) //偶數是model的右眼
+				group_line_row.position.x = -10;
+			else
+				group_line_row.position.x = 0;
+
+			line_column_2.position.x = line_column_2.position.x * -1;
+			line_column_3.position.x = line_column_3.position.x * -1;
+			line_column_4.position.x = line_column_4.position.x * -1;
+			line_column_5.position.x = line_column_5.position.x * -1;
+			line_column_6.position.x = line_column_6.position.x * -1;
+			line_column_7.position.x = line_column_7.position.x * -1;
+			line_column_8.position.x = line_column_8.position.x * -1;
+			line_column_9.position.x = line_column_9.position.x * -1;
+			group_line_column.position.x = group_line_column.position.x * -1;
+
+			if(line_set_Index == 0 || line_set_Index == 1){
+				scene2.add(group_line_row);
+				scene2.add(group_line_column);
+			}
+			else if(line_set_Index == 2 || line_set_Index == 3){
+				scene3.add(group_line_row);
+				scene3.add(group_line_column);
+			}
+			else if(line_set_Index == 4 || line_set_Index == 5){
+				scene4.add(group_line_row);
+				scene4.add(group_line_column);
+			}
+			else if(line_set_Index == 6 || line_set_Index == 7){
+				scene5.add(group_line_row);
+				scene5.add(group_line_column);
+			}
+		}
+
+		function onPointerDown(event){
+
+			if(event.button == 0){
+				document.addEventListener('pointermove', onPointerMove);
+				click_positionX = event.clientX;
+				click_positionY = event.clientY;
+			}	
+			else if(event.button == 2){
+				document.removeEventListener('pointermove', onPointerMove);
+			}
+		}
+
+		function onPointerMove(event){
+			var mouse_moveX = -(click_positionX - event.clientX);
+			var mouse_moveY = click_positionY - event.clientY;
+			var rotationY = mouse_moveX * 0.002;
+			var rotationX = mouse_moveY * 0.002;
+
+			if(line_set_Index == 0){ //往下看8.4度
+				var bones2 = mesh.skeleton;
+				var bone2_righteye = bones2.getBoneByName('右目');
+				bone2_righteye.rotation.x = - rotationX;
+				rotation_data['modellist'][Index]['Right_X_negative_angle'] = Math.round( rotationX / Math.PI * 180 * 10) / 10;
+			}
+			else if(line_set_Index == 1){ //往下看8.4度
+				var bones2 = mesh.skeleton;
+				var bone2_lefteye = bones2.getBoneByName('左目');
+				bone2_lefteye.rotation.x = - rotationX;
+				rotation_data['modellist'][Index]['Left_X_negative_angle'] = Math.round( rotationX / Math.PI * 180 * 10) / 10;
+			}
+			else if(line_set_Index == 2){ //往上看11.4度
+				var bones3 = clone3.skeleton;
+				var bone3_righteye = bones3.getBoneByName('右目');
+				bone3_righteye.rotation.x = - rotationX;
+				rotation_data['modellist'][Index]['Right_X_positive_angle'] = Math.round( rotationX / Math.PI * 180 * 10) / 10;
+			}
+			else if(line_set_Index == 3){ //往上看11.4度
+				var bones3 = clone3.skeleton;
+				var bone3_lefteye = bones3.getBoneByName('左目');
+				bone3_lefteye.rotation.x = - rotationX;
+				rotation_data['modellist'][Index]['Left_X_positive_angle'] = Math.round( rotationX / Math.PI * 180 * 10) / 10;
+			}
+			else if(line_set_Index == 4){ //往右看8度
+				var bones4 = clone4.skeleton;
+				var bone4_righteye = bones4.getBoneByName('右目');
+				bone4_righteye.rotation.y = rotationY;
+				rotation_data['modellist'][Index]['Right_Y_negative_angle'] = Math.round(- rotationY / Math.PI * 180 * 10) / 10;
+			}
+			else if(line_set_Index == 5){ //往右看12.6度
+				var bones4 = clone4.skeleton;
+				var bone4_lefteye = bones4.getBoneByName('左目');
+				bone4_lefteye.rotation.y = rotationY;
+				rotation_data['modellist'][Index]['Right_Y_negative_angle'] = Math.round(- rotationY / Math.PI * 180 * 10) / 10;
+			}
+			else if(line_set_Index == 6){ //往左看12.6度
+				var bones5 = clone5.skeleton;
+				var bone5_righteye = bones5.getBoneByName('右目');
+				bone5_righteye.rotation.y = rotationY;
+				rotation_data['modellist'][Index]['Right_Y_positive_angle'] = Math.round(- rotationY / Math.PI * 180 * 10) / 10;
+			}
+			else if(line_set_Index == 7){ //往左看8度
+				var bones5 = clone5.skeleton;
+				var bone5_lefteye = bones5.getBoneByName('左目');
+				bone5_lefteye.rotation.y = rotationY;
+				rotation_data['modellist'][Index]['Left_Y_positive_angle'] = Math.round(- rotationY / Math.PI * 180 * 10) / 10;
+			}
+		}
+
+		function copy_rotation(){
+			if(line_set_Index == 0){
+				var bones2 = mesh.skeleton;
+				var bone2_righteye = bones2.getBoneByName('右目');
+				var bone2_lefteye = bones2.getBoneByName('左目');
+				bone2_lefteye.rotation.x = bone2_righteye.rotation.x;
+				rotation_data['modellist'][Index]['Left_X_negative_angle'] = Math.round(- bone2_righteye.rotation.x / Math.PI * 180 * 10) / 10;
+				line_set_Index = 1;
+				setLines();
+			}
+			else if(line_set_Index == 2){
+				var bones3 = clone3.skeleton;
+				var bone3_righteye = bones3.getBoneByName('右目');
+				var bone3_lefteye = bones3.getBoneByName('左目');
+				bone3_lefteye.rotation.x = bone3_righteye.rotation.x;
+				rotation_data['modellist'][Index]['Left_X_positive_angle'] = Math.round(- bone3_righteye.rotation.x / Math.PI * 180 * 10) / 10;
+				line_set_Index = 3;
+				setLines();
+			}
+			else if(line_set_Index == 4){
+				var bones4_righteye = clone4.skeleton.getBoneByName('右目');
+				var bones5_lefteye = clone5.skeleton.getBoneByName('左目');
+				bones5_lefteye.rotation.y = - bones4_righteye.rotation.y;
+				rotation_data['modellist'][Index]['Left_Y_positive_angle'] = Math.round( bones4_righteye.rotation.y / Math.PI * 180 * 10) / 10;
+				line_set_Index = 7;
+				setLines();
+			}
+			else if(line_set_Index == 6){
+				var bones5_righteye = clone5.skeleton.getBoneByName('右目');
+				var bones4_lefteye = clone4.skeleton.getBoneByName('左目');
+				bones4_lefteye.rotation.y = - bones5_righteye.rotation.y;
+				rotation_data['modellist'][Index]['Left_Y_negative_angle'] = Math.round( bones5_righteye.rotation.y / Math.PI * 180 * 10) / 10;
+				line_set_Index = 5;
+				setLines();
+			}
+		}
+
+		function save_data(){
+			var bone = mesh.skeleton.getBoneByName('右目');
+			rotation_data['modellist'][Index]['Right_X_negative_angle'] = Math.round(- bone.rotation.x / Math.PI * 180 * 10) / 10;
+			bone = mesh.skeleton.getBoneByName('左目');
+			rotation_data['modellist'][Index]['Left_X_negative_angle'] = Math.round(- bone.rotation.x / Math.PI * 180 * 10) / 10;
+
+			bone = clone3.skeleton.getBoneByName('右目');
+			rotation_data['modellist'][Index]['Right_X_positive_angle'] = Math.round(- bone.rotation.x / Math.PI * 180 * 10) / 10;
+			bone = clone3.skeleton.getBoneByName('左目');
+			rotation_data['modellist'][Index]['Left_X_positive_angle'] = Math.round(- bone.rotation.x / Math.PI * 180 * 10) / 10;
+
+			bone = clone4.skeleton.getBoneByName('右目');
+			rotation_data['modellist'][Index]['Right_Y_negative_angle'] = Math.round(- bone.rotation.y / Math.PI * 180 * 10) / 10;
+			bone = clone4.skeleton.getBoneByName('左目');
+			rotation_data['modellist'][Index]['Left_Y_negative_angle'] = Math.round(- bone.rotation.y / Math.PI * 180 * 10) / 10;
+
+			bone = clone5.skeleton.getBoneByName('右目');
+			rotation_data['modellist'][Index]['Right_Y_positive_angle'] = Math.round(- bone.rotation.y / Math.PI * 180 * 10) / 10;
+			bone = clone5.skeleton.getBoneByName('左目');
+			rotation_data['modellist'][Index]['Left_Y_positive_angle'] = Math.round(- bone.rotation.y / Math.PI * 180 * 10) / 10;
+
+			console.log(rotation_data['modellist'][Index]);
+			saveJson();
+
+			function saveJson(){
+
+				var data_string = JSON.stringify(rotation_data);
+				var blob = new Blob([data_string], {type : "text/plain; charset = utf-8"});
+				var aLink = document.createElement('a');
+				var evt = document.createEvent("HTMLEvents");
+				evt.initEvent("click");
+				aLink.download = 'model_data2.json';
+				aLink.href = URL.createObjectURL(blob);
+				aLink.dispatchEvent(evt);
+				aLink.click();
+			}
+		}
+
+		function onWindowResize() {
+
+			SCREEN_WIDTH = window.innerWidth;
+			SCREEN_HEIGHT = window.innerHeight;
+			aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
+
+			effect.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+			var model_loc = location_data['modellist'][Index];
+			var camera_width = model_loc['line_locationx_4'] * 2 * 1.2;
+			var eyes_middle_y = model_loc['line_locationy_1'] + (model_loc['line_locationy_3'] - model_loc['line_locationy_1']) / 2;
+
+			camera.left = - model_loc['line_locationx_4'];
+			camera.right = - model_loc['line_locationx_2'];
+			camera.top = eyes_middle_y + (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+			camera.bottom = eyes_middle_y - (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+			camera.updateProjectionMatrix();
+
+			camera2.left = - model_loc['line_locationx_4'] * 1.2;
+			camera2.right = model_loc['line_locationx_4'] * 1.2;
+			camera2.top = eyes_middle_y + camera_width * (1/aspect);
+			camera2.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera2.updateProjectionMatrix();
+
+			camera3.left = - model_loc['line_locationx_4'] * 1.2;
+			camera3.right = model_loc['line_locationx_4'] * 1.2;
+			camera3.top = eyes_middle_y + camera_width * (1/aspect);
+			camera3.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera3.updateProjectionMatrix();
+
+			camera4.left = - model_loc['line_locationx_4'] * 1.2;
+			camera4.right = model_loc['line_locationx_4'] * 1.2;
+			camera4.top = eyes_middle_y + camera_width * (1/aspect);
+			camera4.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera4.updateProjectionMatrix();
+
+			camera5.left = - model_loc['line_locationx_4'] * 1.2;
+			camera5.right = model_loc['line_locationx_4'] * 1.2;
+			camera5.top = eyes_middle_y + camera_width * (1/aspect);
+			camera5.bottom = eyes_middle_y - camera_width * (1/aspect);
+			camera5.updateProjectionMatrix();
+		}
+
+
+		function animate() {
+
+			if(modelIsChange)
+			{
+				//remove model
+				var selectedObject_model = scene2.getObjectByName("model");
+                scene2.remove(selectedObject_model);
+				//selectedObject_model = scene2.getObjectByName("model2");
+				//scene2.remove(selectedObject_model);
+				selectedObject_model = scene3.getObjectByName("model3");
+				scene3.remove(selectedObject_model);
+				selectedObject_model = scene4.getObjectByName("model4");
+				scene4.remove(selectedObject_model);
+				selectedObject_model = scene5.getObjectByName("model5");
+				scene5.remove(selectedObject_model);
+			
+				reloadModel();
+				Setting();
+				modelIsChange = false;
+			}
+			requestAnimationFrame(animate);
+			render();
+		}
+
+		function render() {
+
+			effect.clear();
+
+			effect.setViewport(0, 0, SCREEN_WIDTH / 2, SCREEN_HEIGHT);
+			var model_loc = location_data['modellist'][Index];
+			var eyes_middle_y = model_loc['line_locationy_1'] + (model_loc['line_locationy_3'] - model_loc['line_locationy_1']) / 2;
+			if(line_set_Index % 2 == 0){ //偶數是model的右眼
+				camera.left = - model_loc['line_locationx_4'];
+				camera.right = - model_loc['line_locationx_2'];
+				camera.top = eyes_middle_y + (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+				camera.bottom = eyes_middle_y - (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+				camera.updateProjectionMatrix();
+			} 
+			else{
+				camera.left = model_loc['line_locationx_2'];
+				camera.right = model_loc['line_locationx_4'];
+				camera.top = eyes_middle_y + (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+				camera.bottom = eyes_middle_y - (model_loc['line_locationx_4']-model_loc['line_locationx_2']) * (1/aspect);
+				camera.updateProjectionMatrix();
+			}
+
+			if(line_set_Index == 0 || line_set_Index == 1){
+				effect.render(scene2, camera);
+			}
+			else if(line_set_Index == 2 || line_set_Index == 3){
+				effect.render(scene3, camera);
+			}
+			else if(line_set_Index == 4 || line_set_Index == 5){
+				effect.render(scene4, camera);
+			}
+			else if(line_set_Index == 6 || line_set_Index == 7){
+				effect.render(scene5, camera);
+			}
+
+			effect.setViewport(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(scene2, camera2);
+
+			effect.setViewport(SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(scene3, camera3);
+
+			effect.setViewport(SCREEN_WIDTH / 2, 0, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(scene4, camera4);
+
+			effect.setViewport(SCREEN_WIDTH / 2 + SCREEN_WIDTH / 4, 0, SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2);
+			effect.render(scene5, camera5);
+		}
+	</script>
+
+</body>
+
+</html>
