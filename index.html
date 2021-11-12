@@ -347,7 +347,39 @@
 				scene4.add(clone4);
 				scene5.add(clone5);
 
+				init_eyes_rotation();
+
 			}, onProgress, null);
+		}
+
+		function init_eyes_rotation(){
+			var model_data = location_data['modellist'][Index];
+
+			var rotation = model_data['Right_X_negative_angle'];
+			mesh.skeleton.getBoneByName('右目').rotation.x = -rotation / 180 *Math.PI;
+
+			rotation = model_data['Left_X_negative_angle'];
+			mesh.skeleton.getBoneByName('左目').rotation.x = -rotation / 180 *Math.PI;
+
+			rotation = model_data['Right_X_positive_angle'];
+			clone3.skeleton.getBoneByName('右目').rotation.x = -rotation / 180 *Math.PI;
+
+			rotation = model_data['Left_X_positive_angle'];
+			clone3.skeleton.getBoneByName('左目').rotation.x = -rotation / 180 *Math.PI;
+
+			rotation = model_data['Right_Y_negative_angle'];
+			clone4.skeleton.getBoneByName('右目').rotation.y = -rotation / 180 *Math.PI;
+
+			rotation = model_data['Left_Y_negative_angle'];
+			clone4.skeleton.getBoneByName('左目').rotation.y = -rotation / 180 *Math.PI;
+
+			rotation = model_data['Right_Y_positive_angle'];
+			clone5.skeleton.getBoneByName('右目').rotation.y = -rotation / 180 *Math.PI;
+
+			rotation = model_data['Left_Y_positive_angle'];
+			clone5.skeleton.getBoneByName('左目').rotation.y = -rotation / 180 *Math.PI;
+
+			
 		}
 
 		function Setting(){
@@ -692,7 +724,6 @@
 			camera5.bottom = eyes_middle_y - camera_width * (1/aspect);
 			camera5.updateProjectionMatrix();
 		}
-
 
 		function animate() {
 
